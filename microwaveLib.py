@@ -395,20 +395,24 @@ def Strip_tee(chip,structure,w=None,s=None,radius=None,r_ins=None,w1=None,w2=Non
             w = struct().defaults['w']
         except KeyError:
             print('\x1b[33mw not defined in ',chip.chipID)
+
     if radius is None:
         try:
             radius = 2*struct().defaults['s']
         except KeyError:
             print('\x1b[33mradius not defined in ',chip.chipID,'!\x1b[0m')
             return
+        
     if r_ins is None: #check if r_ins is defined in the defaults
         try:
             r_ins = struct().defaults['r_ins']
         except KeyError: # quiet catch
             r_ins = None   
+
     defaults1 = copy(struct().defaults)
 
     chip.add(dxf.rectangle(struct().start,r_ins,w,valign=const.MIDDLE,rotation=struct().direction,bgcolor=bgcolor,**kwargStrip(kwargs)),structure=structure)
+    
     chip.add(InsideCurve(struct().getPos((r_ins,-w/2)),r_ins,rotation=struct().direction,hflip=hflip,bgcolor=bgcolor,**kwargs))
     chip.add(InsideCurve(struct().getPos((r_ins,w/2)),r_ins,rotation=struct().direction,hflip=hflip,vflip=True,bgcolor=bgcolor,**kwargs))
     struct().translatePos((r_ins,0),angle=0)
@@ -417,7 +421,7 @@ def Strip_tee(chip,structure,w=None,s=None,radius=None,r_ins=None,w1=None,w2=Non
         w2= r_ins*2+w
     elif w2 < r_ins*2+w:
         w2= r_ins*2+w
- 
+
     chip.add(dxf.rectangle(struct().start,w1,w2,valign=const.MIDDLE,rotation=struct().direction,bgcolor=bgcolor,**kwargStrip(kwargs)),structure=structure)
     s_l = struct().cloneAlong((w1/2,w2/2),newDirection=90, defaults=defaults1)
     s_r = struct().cloneAlong((w1/2,-w2/2),newDirection=-90, defaults=defaults1)
@@ -453,7 +457,7 @@ def CPW_straight(chip,structure,length,w=None,s=None,bondwires=False,bond_pitch=
     if bondwires: # bond parameters patched through kwargs
         num_bonds = int(length/bond_pitch)
         this_struct = struct().clone()
-        this_struct.shiftPos(bond_pitch)
+        this_struct.shiftPos(bond_pitch/2)
         if not incl_end_bond: num_bonds -= 1
         for i in range(num_bonds):
             Airbridge(chip, this_struct, **kwargs)
