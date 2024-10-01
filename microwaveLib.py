@@ -456,7 +456,7 @@ def CPW_straight(chip,structure,length,w=None,s=None,bondwires=False,bond_pitch=
             print('\x1b[33ms not defined in ',chip.chipID,'!\x1b[0m')
             
     if bondwires: # bond parameters patched through kwargs
-        num_bonds = int(length/bond_pitch)
+        num_bonds = round(length/bond_pitch)
         this_struct = struct().clone()
         this_struct.shiftPos(bond_start)
         if not incl_end_bond: num_bonds -= 1
@@ -469,7 +469,8 @@ def CPW_straight(chip,structure,length,w=None,s=None,bondwires=False,bond_pitch=
 
     return struct().getPos()
         
-def CPW_taper(chip,structure,length=None,w0=None,s0=None,w1=None,s1=None,bgcolor=None,offset=(0,0),**kwargs): #note: uses CPW conventions
+def CPW_taper(chip,structure,length=None,w0=None,s0=None,w1=None,s1=None,bgcolor=None,offset=(0,0),
+              bondwires=False,bond_pitch=70, bond_start = 0, incl_end_bond=True,**kwargs): #note: uses CPW conventions
     def struct():
         if isinstance(structure,m.Structure):
             return structure
@@ -503,6 +504,15 @@ def CPW_taper(chip,structure,length=None,w0=None,s0=None,w1=None,s1=None,bgcolor
     if length is None:
         length = math.sqrt(3)*abs(w0/2+s0-w1/2-s1)
     
+    if bondwires: # bond parameters patched through kwargs
+        num_bonds = round(length/bond_pitch)
+        this_struct = struct().clone()
+        this_struct.translatePos((bond_start, bond_start/length * (w1/2-w0/2 + offset[1])/2),angle=0)
+        if not incl_end_bond: num_bonds -= 1
+        for i in range(num_bonds):
+            Airbridge(chip, this_struct, **kwargs)
+            this_struct.translatePos((bond_pitch, bond_pitch/length * (w1/2-w0/2 + offset[1])/2))
+
     chip.add(SkewRect(struct().getPos((0,-w0/2)),length,s0,(offset[0],w0/2-w1/2+offset[1]),s1,rotation=struct().direction,valign=const.TOP,edgeAlign=const.TOP,bgcolor=bgcolor,**kwargs))
     chip.add(SkewRect(struct().getPos((0,w0/2)),length,s0,(offset[0],w1/2-w0/2+offset[1]),s1,rotation=struct().direction,valign=const.BOTTOM,edgeAlign=const.BOTTOM,bgcolor=bgcolor,**kwargs),structure=structure,offsetVector=(length+offset[0],offset[1]))
     
