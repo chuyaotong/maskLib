@@ -433,7 +433,8 @@ def Strip_tee(chip,structure,w=None,s=None,radius=None,r_ins=None,w1=None,w2=Non
 # ===============================================================================
 
 
-def CPW_straight(chip,structure,length,w=None,s=None,bondwires=False,bond_pitch=70,incl_end_bond=True,bgcolor=None,**kwargs): #note: uses CPW conventions
+def CPW_straight(chip,structure,length,w=None,s=None,bondwires=False,bond_pitch=70, bond_start = 0, 
+                 incl_end_bond=True,bgcolor=None,**kwargs): #note: uses CPW conventions
     def struct():
         if isinstance(structure,m.Structure):
             return structure
@@ -453,11 +454,11 @@ def CPW_straight(chip,structure,length,w=None,s=None,bondwires=False,bond_pitch=
             s = struct().defaults['s']
         except KeyError:
             print('\x1b[33ms not defined in ',chip.chipID,'!\x1b[0m')
-
+            
     if bondwires: # bond parameters patched through kwargs
         num_bonds = int(length/bond_pitch)
         this_struct = struct().clone()
-        this_struct.shiftPos(bond_pitch/2)
+        this_struct.shiftPos(bond_start)
         if not incl_end_bond: num_bonds -= 1
         for i in range(num_bonds):
             Airbridge(chip, this_struct, **kwargs)
