@@ -434,7 +434,7 @@ def Strip_tee(chip,structure,w=None,s=None,radius=None,r_ins=None,w1=None,w2=Non
 
 
 def CPW_straight(chip,structure,length,w=None,s=None,bondwires=False,bond_pitch=70, bond_start = 0, 
-                 incl_end_bond=True,bgcolor=None,**kwargs): #note: uses CPW conventions
+                 incl_end_bond=True,bgcolor=None, xvr_width = 0, **kwargs): #note: uses CPW conventions
     def struct():
         if isinstance(structure,m.Structure):
             return structure
@@ -454,13 +454,23 @@ def CPW_straight(chip,structure,length,w=None,s=None,bondwires=False,bond_pitch=
             s = struct().defaults['s']
         except KeyError:
             print('\x1b[33ms not defined in ',chip.chipID,'!\x1b[0m')
-            
+
+    if xvr_width >= 5 and xvr_width <= 16:
+        bond_width = 5.0
+    elif xvr_width > 16 and xvr_width <= 27:
+        bond_width = 7.5
+    elif xvr_width > 27 and xvr_width <= 32:
+        bond_width = 10.0
+    else:
+        bond_width = 0
+
     if bondwires: # bond parameters patched through kwargs
-        num_bonds = round(length/bond_pitch)
+        
+        num_bonds = int((length - bond_start) / bond_pitch)
         this_struct = struct().clone()
         this_struct.shiftPos(bond_start)
         if not incl_end_bond: num_bonds -= 1
-        for i in range(num_bonds):
+        for i in range(num_bonds + 1):
             Airbridge(chip, this_struct, **kwargs)
             this_struct.shiftPos(bond_pitch)
     
@@ -504,14 +514,15 @@ def CPW_taper(chip,structure,length=None,w0=None,s0=None,w1=None,s1=None,bgcolor
     if length is None:
         length = math.sqrt(3)*abs(w0/2+s0-w1/2-s1)
     
+    #TODO FIX
     if bondwires: # bond parameters patched through kwargs
-        num_bonds = round(length/bond_pitch)
+        num_bonds = int((length-bond_start)/bond_pitch)
         this_struct = struct().clone()
-        this_struct.translatePos((bond_start, bond_start/length * (w1/2-w0/2 + offset[1])/2),angle=0)
+        this_struct.translatePos((bond_start, bond_start/length * (w1/2-w0/2)),angle=0)
         if not incl_end_bond: num_bonds -= 1
-        for i in range(num_bonds):
+        for i in range(num_bonds + 1):
             Airbridge(chip, this_struct, **kwargs)
-            this_struct.translatePos((bond_pitch, bond_pitch/length * (w1/2-w0/2 + offset[1])/2))
+            this_struct.translatePos((bond_pitch, bond_pitch/length * (w1/2-w0/2)))
 
     chip.add(SkewRect(struct().getPos((0,-w0/2)),length,s0,(offset[0],w0/2-w1/2+offset[1]),s1,rotation=struct().direction,valign=const.TOP,edgeAlign=const.TOP,bgcolor=bgcolor,**kwargs))
     chip.add(SkewRect(struct().getPos((0,w0/2)),length,s0,(offset[0],w1/2-w0/2+offset[1]),s1,rotation=struct().direction,valign=const.BOTTOM,edgeAlign=const.BOTTOM,bgcolor=bgcolor,**kwargs),structure=structure,offsetVector=(length+offset[0],offset[1]))
@@ -1059,7 +1070,8 @@ def CPW_directTo(chip,from_structure,to_structure,to_flipped=True,w=None,s=None,
 
 #Various wiggles (meander) definitions 
 
-def wiggle_calc(chip,structure,length=None,nTurns=None,maxWidth=None,Width=None,start_bend = True,stop_bend=True,w=None,s=None,radius=None,debug=False,**kwargs):
+def wiggle_calc(chip,structure,length=None,nTurns=None,maxWidth=None,Width=None,start_bend = True,
+                stop_bend=True,w=None,s=None,radius=None,debug=False,**kwargs):
     #figure out 
     def struct():
         if isinstance(structure,m.Structure):
@@ -1115,10 +1127,15 @@ def wiggle_calc(chip,structure,length=None,nTurns=None,maxWidth=None,Width=None,
                 h = (length - nTurns*2*math.pi*radius - (start_bend+stop_bend)*(math.pi/2-1)*radius)/(4*nTurns)
     else: #length is not contrained
         h= maxWidth-radius-w/2-s
-    h = max(h,radius)
+    if radius > h :
+        print(f"warning: radius {radius} is larger than h {h}")
+    if h<0 :
+        print(f"warning: h {h} is negative, this params set doesnt work")
+    #h = max(h,radius)
     return {'nTurns':nTurns,'h':h,'length':length,'maxWidth':maxWidth,'Width':Width}
 
-def CPW_wiggles(chip,structure,length=None,nTurns=None,maxWidth=None,CCW=True,start_bend = True,stop_bend=True,w=None,s=None,radius=None,bgcolor=None,debug=False,**kwargs):
+def CPW_wiggles(chip,structure,length=None,nTurns=None,maxWidth=None,CCW=True,start_bend = True,
+                stop_bend=True,w=None,s=None,radius=None,bgcolor=None,debug=False,**kwargs):
     def struct():
         if isinstance(structure,m.Structure):
             return structure
@@ -1141,32 +1158,41 @@ def CPW_wiggles(chip,structure,length=None,nTurns=None,maxWidth=None,CCW=True,st
     if debug:
         chip.add(dxf.rectangle(struct().start,(nTurns*4 + start_bend + stop_bend)*radius,2*h,valign=const.MIDDLE,rotation=struct().direction,layer='FRAME'))
         chip.add(dxf.rectangle(struct().start,(nTurns*4 + start_bend + stop_bend)*radius,2*maxWidth,valign=const.MIDDLE,rotation=struct().direction,layer='FRAME'))
+    
     if start_bend:
         CPW_bend(chip,structure,angle=90,CCW=CCW,w=w,s=s,radius=radius,bgcolor=bgcolor,**kwargs)
-        if h > radius:
-            CPW_straight(chip,structure,h-radius,w=w,s=s,bgcolor=bgcolor,**kwargs)
-    else:
+        # if h > radius:
+        #     CPW_straight(chip,structure,h-radius,w=w,s=s,bgcolor=bgcolor,**kwargs)
+    # else:
+    #     # CPW_straight(chip,structure,h,w=w,s=s,bgcolor=bgcolor,**kwargs)
+
+    # CPW_bend(chip,structure,angle=180,CCW=not CCW,w=w,s=s,radius=radius,bgcolor=bgcolor,**kwargs)
+
+    # CPW_straight(chip,structure,h+radius,w=w,s=s,bgcolor=bgcolor,**kwargs)
+    # # CPW_straight(chip,structure,h+radius,w=w,s=s,bgcolor=bgcolor,**kwargs)
+
+    # # if h > radius:
+    # #     CPW_straight(chip,structure,h-radius,w=w,s=s,bgcolor=bgcolor,**kwargs)
+    # CPW_bend(chip,structure,angle=180,CCW=CCW,w=w,s=s,radius=radius,bgcolor=bgcolor,**kwargs)
+    # if h > radius:
+    #     CPW_straight(chip,structure,h-radius,w=w,s=s,bgcolor=bgcolor,**kwargs)
+    for n in range(nTurns):
         CPW_straight(chip,structure,h,w=w,s=s,bgcolor=bgcolor,**kwargs)
-    CPW_bend(chip,structure,angle=180,CCW=not CCW,w=w,s=s,radius=radius,bgcolor=bgcolor,**kwargs)
-    CPW_straight(chip,structure,h+radius,w=w,s=s,bgcolor=bgcolor,**kwargs)
-    if h > radius:
-        CPW_straight(chip,structure,h-radius,w=w,s=s,bgcolor=bgcolor,**kwargs)
-    CPW_bend(chip,structure,angle=180,CCW=CCW,w=w,s=s,radius=radius,bgcolor=bgcolor,**kwargs)
-    if h > radius:
-        CPW_straight(chip,structure,h-radius,w=w,s=s,bgcolor=bgcolor,**kwargs)
-    for n in range(nTurns-1):
-        CPW_straight(chip,structure,h+radius,w=w,s=s,bgcolor=bgcolor,**kwargs)
         CPW_bend(chip,structure,angle=180,CCW=not CCW,w=w,s=s,radius=radius,bgcolor=bgcolor,**kwargs)
-        CPW_straight(chip,structure,h+radius,w=w,s=s,bgcolor=bgcolor,**kwargs)
-        if h > radius:
-            CPW_straight(chip,structure,h-radius,w=w,s=s,bgcolor=bgcolor,**kwargs)
+        CPW_straight(chip,structure,h*2,w=w,s=s,bgcolor=bgcolor,**kwargs)
         CPW_bend(chip,structure,angle=180,CCW=CCW,w=w,s=s,radius=radius,bgcolor=bgcolor,**kwargs)
-        if h > radius:
-            CPW_straight(chip,structure,h-radius,w=w,s=s,bgcolor=bgcolor,**kwargs)
+        CPW_straight(chip,structure,h,w=w,s=s,bgcolor=bgcolor,**kwargs)
+
+
+        # if h > radius:
+        #     CPW_straight(chip,structure,h-radius,w=w,s=s,bgcolor=bgcolor,**kwargs)
+        # CPW_bend(chip,structure,angle=180,CCW=CCW,w=w,s=s,radius=radius,bgcolor=bgcolor,**kwargs)
+        # if h > radius:
+        #     CPW_straight(chip,structure,h-radius,w=w,s=s,bgcolor=bgcolor,**kwargs)
     if stop_bend:
         CPW_bend(chip,structure,angle=90,CCW=not CCW,w=w,s=s,radius=radius,bgcolor=bgcolor,**kwargs)
-    else:
-        CPW_straight(chip,structure,radius,w=w,s=s,bgcolor=bgcolor,**kwargs)
+    # else:
+    #     CPW_straight(chip,structure,h,w=w,s=s,bgcolor=bgcolor,**kwargs)
 
 def Strip_wiggles(chip,structure,length=None,nTurns=None,maxWidth=None,CCW=True,start_bend = True,stop_bend=True,w=None,radius=None,bgcolor=None,**kwargs):
     def struct():
@@ -1191,30 +1217,30 @@ def Strip_wiggles(chip,structure,length=None,nTurns=None,maxWidth=None,CCW=True,
 
     if start_bend:
         Strip_bend(chip,structure,angle=90,CCW=CCW,w=w,radius=radius,bgcolor=bgcolor,**kwargs)
-        if h > radius:
-            Strip_straight(chip,structure,h-radius,w=w,bgcolor=bgcolor,**kwargs)
-    else:
+        # if h > radius:
+        #     Strip_straight(chip,structure,h-radius,w=w,bgcolor=bgcolor,**kwargs)
+    # else:
+    #     Strip_straight(chip,structure,h,w=w,bgcolor=bgcolor,**kwargs)
+    # Strip_bend(chip,structure,angle=180,CCW=not CCW,w=w,radius=radius,bgcolor=bgcolor,**kwargs)
+    # Strip_straight(chip,structure,h+radius,w=w,bgcolor=bgcolor,**kwargs)
+    # if h > radius:
+    #     Strip_straight(chip,structure,h-radius,w=w,bgcolor=bgcolor,**kwargs)
+    # Strip_bend(chip,structure,angle=180,CCW=CCW,w=w,radius=radius,bgcolor=bgcolor,**kwargs)
+    # if h > radius:
+    #     Strip_straight(chip,structure,h-radius,w=w,bgcolor=bgcolor,**kwargs)
+    for n in range(nTurns):
         Strip_straight(chip,structure,h,w=w,bgcolor=bgcolor,**kwargs)
-    Strip_bend(chip,structure,angle=180,CCW=not CCW,w=w,radius=radius,bgcolor=bgcolor,**kwargs)
-    Strip_straight(chip,structure,h+radius,w=w,bgcolor=bgcolor,**kwargs)
-    if h > radius:
-        Strip_straight(chip,structure,h-radius,w=w,bgcolor=bgcolor,**kwargs)
-    Strip_bend(chip,structure,angle=180,CCW=CCW,w=w,radius=radius,bgcolor=bgcolor,**kwargs)
-    if h > radius:
-        Strip_straight(chip,structure,h-radius,w=w,bgcolor=bgcolor,**kwargs)
-    for n in range(nTurns-1):
-        Strip_straight(chip,structure,h+radius,w=w,bgcolor=bgcolor,**kwargs)
         Strip_bend(chip,structure,angle=180,CCW=not CCW,w=w,radius=radius,bgcolor=bgcolor,**kwargs)
-        Strip_straight(chip,structure,h+radius,w=w,bgcolor=bgcolor,**kwargs)
-        if h > radius:
-            Strip_straight(chip,structure,h-radius,w=w,bgcolor=bgcolor,**kwargs)
+        Strip_straight(chip,structure,h*2,w=w,bgcolor=bgcolor,**kwargs)
+        # if h > radius:
+        #     Strip_straight(chip,structure,h-radius,w=w,bgcolor=bgcolor,**kwargs)
         Strip_bend(chip,structure,angle=180,CCW=CCW,w=w,radius=radius,bgcolor=bgcolor,**kwargs)
-        if h > radius:
-            Strip_straight(chip,structure,h-radius,w=w,bgcolor=bgcolor,**kwargs)
+        # if h > radius:
+        Strip_straight(chip,structure,h,w=w,bgcolor=bgcolor,**kwargs)
     if stop_bend:
         Strip_bend(chip,structure,angle=90,CCW=not CCW,w=w,radius=radius,bgcolor=bgcolor,**kwargs)
-    else:
-        Strip_straight(chip,structure,radius,w=w,bgcolor=bgcolor,**kwargs)
+    # else:
+    #     Strip_straight(chip,structure,h,w=w,bgcolor=bgcolor,**kwargs)
 
 def Inductor_wiggles(chip,structure,length=None,nTurns=None,maxWidth=None,Width=None,CCW=True,start_bend = True,stop_bend=True,pad_to_width=None,w=None,s=None,radius=None,bgcolor=None,**kwargs):
     def struct():
