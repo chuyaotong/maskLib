@@ -30,6 +30,26 @@ def curveAB(a,b,clockwise=True,angleDeg=90,ptDensity=120):
         points.append(vadd(center,rotate_2d(vsub(a,center),-clockwise*i*angle/segments)))
     return points
 
+def bondcurveAB(a,b,radius, bond_pitch, clockwise=True,angleDeg=90,ptDensity=120):
+    # generate a segmented curve from A to B specified by angle. Point density = #pts / revolution
+    # return list of points
+    # clockwise can be boolean {1,0} or sign type {1,-1}
+    
+    if clockwise == 0:
+        clockwise = -1
+        
+    angle = math.radians(angleDeg)
+    segments = int(angle*radius/bond_pitch)
+    curve_start = (angle*radius % bond_pitch) / radius / 2
+    segmentradian = bond_pitch/radius
+    center = vadd(midpoint(a,b),vmul_scalar(rotate_2d(vsub(b,a),-clockwise*math.pi/2),0.5/math.tan(angle/2)))
+    points = []
+
+    for i in range(segments):
+        points.append(vadd(center,rotate_2d(vsub(a,center),
+                                            -clockwise*((i+0.5)*segmentradian+curve_start))))
+    return points
+
 def cornerRound(vertex,quadrant,radius,clockwise=True,ptDensity=120):
     #quadrant corresponds to quadrants 1-4
     #generate a curve to replace the vertex

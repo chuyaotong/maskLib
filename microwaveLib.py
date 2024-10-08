@@ -18,7 +18,7 @@ from dxfwrite.vector2d import vadd, midpoint ,vsub, vector2angle, magnitude, dis
 from dxfwrite.algebra import rotate_2d
 
 from maskLib.Entities import SolidPline, SkewRect, CurveRect, RoundRect, InsideCurve, DogBone
-from maskLib.utilities import kwargStrip, curveAB
+from maskLib.utilities import kwargStrip, curveAB, bondcurveAB
 
 from copy import deepcopy
 from matplotlib.path import Path
@@ -32,7 +32,8 @@ import numpy as np
 # ===============================================================================
 #TODO move to MaskLib
 
-def waffle_bumpbond(chip, grid_x, grid_y=None, width=10, height=None, exclude=None, padx=0, pady=None, bleedRadius=1, layer1='140_IUBM', layer2='40_UBM', layer3='45_BUMP'):
+def waffle_bumpbond(chip, grid_x, grid_y=None, width=10, height=None, exclude=None, padx=0, 
+                    pady=None, bleedRadius=1, layer1='140_IUBM', layer2='40_UBM', layer3='145_IBUMP'):
     radius = max(int(bleedRadius), 0)
 
     if exclude is None:
@@ -514,7 +515,6 @@ def CPW_taper(chip,structure,length=None,w0=None,s0=None,w1=None,s1=None,bgcolor
     if length is None:
         length = math.sqrt(3)*abs(w0/2+s0-w1/2-s1)
     
-    #TODO FIX
     if bondwires: # bond parameters patched through kwargs
         num_bonds = int((length-bond_start)/bond_pitch)
         this_struct = struct().clone()
@@ -714,7 +714,8 @@ def CPW_stub_round(chip,structure,w=None,s=None,round_left=True,round_right=True
             chip.add(InsideCurve(struct().getPos((flipped and s or w/2,-w/2)),w/2,rotation=struct().direction,hflip=flipped,vflip=True,bgcolor=bgcolor,**kwargs))
             chip.add(dxf.rectangle(struct().getPos((s+w/2-dx,-w/2)),-s,w/2,rotation=struct().direction,halign = flipped and const.RIGHT or const.LEFT, bgcolor=bgcolor,**kwargStrip(kwargs)),structure=structure,length=s+w/2)
     
-def CPW_bend(chip,structure,angle=90,CCW=True,w=None,s=None,radius=None,ptDensity=120,bondwires=False,incl_end_bond=True,bond_pitch=70,bgcolor=None,**kwargs):
+def CPW_bend(chip,structure,angle=90,CCW=True,w=None,s=None,radius=None,ptDensity=120,
+             bondwires=False,incl_end_bond=True,bond_pitch=70,bgcolor=None,**kwargs):
     def struct():
         if isinstance(structure,m.Structure):
             return structure
@@ -740,7 +741,7 @@ def CPW_bend(chip,structure,angle=90,CCW=True,w=None,s=None,radius=None,ptDensit
             return
     if bgcolor is None:
         bgcolor = chip.wafer.bg()
-        
+
     while angle < 0:
         angle = angle + 360
     angle = angle%360
@@ -754,13 +755,19 @@ def CPW_bend(chip,structure,angle=90,CCW=True,w=None,s=None,radius=None,ptDensit
 
     if bondwires: # bond parameters patched through kwargs
         bond_angle_density = 8
-        if 'lincolnLabs' in kwargs and kwargs['lincolnLabs']: bond_angle_density = int((2*math.pi*radius)/bond_pitch)
+        if 'lincolnLabs' in kwargs and kwargs['lincolnLabs']: 
+            bond_angle_density = int((2*math.pi*radius)/bond_pitch)
         clockwise = 1 if CCW else -1
-        bond_points = curveAB(startstruct.start, struct().start, clockwise=clockwise, angleDeg=angle, ptDensity=bond_angle_density)
-        if not incl_end_bond: bond_points = bond_points[:-1]
-        for i, bond_point in enumerate(bond_points[1:], start=1):
-            this_struct = m.Structure(chip, start=bond_point, direction=startstruct.direction-clockwise*i*360/bond_angle_density)
-            Airbridge(chip, this_struct, br_radius=radius, clockwise=clockwise, **kwargs)
+        segments = int(math.radians(angle)/(2*math.pi) *bond_angle_density) + 1
+        segmentradian = bond_pitch/radius
+        curve_start = (angleRadians*radius % bond_pitch) / radius / 2
+        if segments > 0:
+            bond_points = bondcurveAB(startstruct.start, struct().start, radius = radius, bond_pitch = 70, clockwise=clockwise, angleDeg=angle, 
+                                ptDensity=bond_angle_density)
+            if not incl_end_bond: bond_points = bond_points[:-1]
+            for i, bond_point in enumerate(bond_points):
+                this_struct = m.Structure(chip, start=bond_point, direction=startstruct.direction-clockwise*360*(curve_start + (i+0.5) * segmentradian)/(2*np.pi))
+                Airbridge(chip, this_struct, br_radius=radius, clockwise=clockwise, **kwargs)
 
 def CPW_tee(chip,structure,w=None,s=None,radius=None,r_ins=None,w1=None,s1=None,bgcolor=None,hflip=False,branch_off=const.CENTER, polygon_overlap=False, **kwargs):
     
@@ -1563,6 +1570,12 @@ def Airbridge(
         if xvr_length is None:
             xvr_length = cpw_w + 2*cpw_s + 2*(rr_cpw_gap)
 
+        shape_overlap = 0.1 # LL requires >= 0.1
+        delta = 0
+        
+        if br_radius > 0:
+            xvr_length += 4
+
         if 5 <= xvr_length <= 16: # BR.W.1, RR.L.1
             xvr_width = 5
             rr_length = 8
@@ -1572,12 +1585,11 @@ def Airbridge(
         elif 27 < xvr_length <= 32: # BR.W.3, RR.L.3
             xvr_width = 10
             rr_length = 14
+
         rr_width = xvr_width + 3 # RR.W.1
-        shape_overlap = 0.1 # LL requires >= 0.1
-        delta = 0
-        if br_radius > 0:
-            r = br_radius - cpw_w/2 - cpw_s
-            delta = r*(1-math.sqrt(1-1/r**2*((rr_width + 2*rr_br_gap)/2)**2))
+
+        #     r = br_radius - cpw_w/2 - cpw_s
+        #     delta = r*(1-math.sqrt(1-1/r**2*((rr_width + 2*rr_br_gap)/2)**2))
         # this code does not check if your bend is super severe and the necessary delta
         # changes the necessary xvr_widths and rr_lengths, so don't do anything extreme
 
