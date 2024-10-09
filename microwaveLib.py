@@ -429,6 +429,84 @@ def Strip_tee(chip,structure,w=None,s=None,radius=None,r_ins=None,w1=None,w2=Non
 
     return s_l,s_r
 
+## fragile, needs testing, some directions might not work
+def Strip_rounded_pincer(chip, structure, pincer_padw, 
+                       pincer_l, pincer_r = None, 
+                       w = None, r_end = None, pincer_w = None, r_tee = 1, 
+                       left_half=False, right_half=False,
+                       pincer_flipped=False, 
+                       bgcolor=None, polygon_overlap=True, ptDensity = 64, **kwargs):
+
+    def struct():
+        if isinstance(structure,m.Structure):
+            return structure
+        elif isinstance(structure,tuple):
+            return m.Structure(chip,structure)
+        else:
+            return chip.structure(structure)
+    if w is None:
+        try:
+            w = struct().defaults['w']
+        except KeyError:
+            w=0
+            print('\x1b[33mw not defined in ',chip.chipID)
+    
+    if r_end is None:
+        r_end = pincer_padw / 2
+    
+    if pincer_w is None:
+        pincer_w = w
+
+    if pincer_r <= pincer_padw/2 or pincer_r is None:
+        pincer_r = pincer_padw/2
+         
+    if not pincer_flipped: s_start = struct().clone()
+    # else:
+    #     struct().shiftPos(pincer_padw + pincer_ter + 2 * s,angle=180)
+    #     s_start = struct().clone()
+
+    s_left, s_right = Strip_tee(chip, struct(), w = w, w1 = pincer_padw, w2 = pincer_w, r_ins=r_tee, 
+                            ptDensity=ptDensity, polygon_overlap=polygon_overlap, **kwargs)
+        
+    if not left_half and not right_half:
+
+        Strip_bend(chip, s_left, CCW=True, w=pincer_padw, radius = pincer_r, 
+                      ptDensity = ptDensity, **kwargs)
+        Strip_stub_open(chip, s_left, w = pincer_padw, r_out = r_end, length = pincer_l, 
+                           curve_out = True, 
+                           polygon_overlap=polygon_overlap, ptDensity = ptDensity, **kwargs)
+
+        Strip_bend(chip, s_right, CCW=False, w=pincer_padw, radius=pincer_r, **kwargs)
+        Strip_stub_open(chip, s_right, w = pincer_padw, r_out = r_end, length = pincer_l,
+                           curve_out = True, polygon_overlap=polygon_overlap, **kwargs)
+    
+    elif left_half:
+        Strip_bend(chip, s_left, CCW=True, w=pincer_padw, radius = pincer_r, 
+                      ptDensity = ptDensity, **kwargs)
+        Strip_stub_open(chip, s_left, w = pincer_padw, r_out = r_end, length = pincer_l, 
+                           curve_out = True, 
+                           polygon_overlap=polygon_overlap, ptDensity = ptDensity, **kwargs)
+
+        Strip_stub_open(chip, s_right, w = pincer_padw, r_out = r_end, 
+                           curve_out = True, polygon_overlap=polygon_overlap, **kwargs)
+        
+    elif right_half:
+        Strip_stub_open(chip, s_left, w = pincer_padw, r_out = r_end, 
+                           curve_out = True, polygon_overlap=polygon_overlap, 
+                           ptDensity= ptDensity, **kwargs)
+        
+        Strip_bend(chip, s_right, CCW=False, w=pincer_padw, radius=pincer_r, ptDensity = ptDensity, 
+                      **kwargs)
+        Strip_stub_open(chip, s_right, w = pincer_padw, r_out = r_end, length = pincer_l,
+                           curve_out = True, polygon_overlap=polygon_overlap, ptDensity = ptDensity, **kwargs)
+
+
+    if not pincer_flipped:
+        struct().updatePos(s_start.getPos(), angle = 180)
+    else: 
+        struct().updatePos(s_start.getPos(),angle=180)
+
+       
 # ===============================================================================
 # basic NEGATIVE CPW function definitions
 # ===============================================================================
@@ -2001,4 +2079,244 @@ def Capa_linker_tee(chip, pos, length, width, dist_ground_height,
         for i in range(num_bonds):
             Airbridge(chip, this_struct, **kwargs)
             this_struct.shiftPos(bond_pitch)
+
+def FC_finger_capacitor(chip, structure, finger_cap_length = 100, finger_width = 3, finger_sep = 3,
+                        stub_end = 3, finger_number = 6, cpw_w=10, cpw_s=6, ptDensity = 64, Qlayer = False):
+    if Qlayer:
+        layerA = '5_M1'
+        layerB = '105_IM1'
+    else:
+        layerA = '105_IM1'
+        layerB = '5_M1'
+    finger_length=finger_cap_length-stub_end*2
+    total_width = finger_number*2*finger_width + (finger_number*2+1)*finger_sep
+
+    FC_CPW_taper(chip, structure, length=50, w0=cpw_w, s0=cpw_s, w1=total_width, s1=37.5, 
+                    Qlayer = Qlayer)
+
+    # Seperation on the outside of the finger capacitor
+    FC_CPW_straight(chip, structure, length=finger_cap_length, w=total_width, s=37.5, Qlayer = Qlayer)
+
+    structure.translatePos((-finger_length-stub_end, (finger_number-0.5)*(finger_sep+finger_width)), angle=0)
+
+    for i in range(finger_number):
+        CPW_straight(chip, structure, length=finger_length, w=finger_width, s=finger_sep, 
+                        layer = layerA)
+        CPW_stub_open(chip, structure, length=stub_end, r_ins=1.5, w=finger_width, s=finger_sep, 
+                         ptDensity=ptDensity, layer = layerA)
+        structure.translatePos((-finger_length-stub_end, -finger_width-finger_sep), angle=180)
+        CPW_stub_open(chip, structure, length=stub_end, r_ins=1.5, w=finger_width, s=finger_sep, 
+                         ptDensity=ptDensity, layer = layerA)
+        structure.translatePos((-stub_end, finger_width+finger_sep), angle=180)
+    # the last separation  
+    chip.add(dxf.rectangle(structure.getPos((0, finger_width/2)), finger_length, finger_sep, 
+                           rotation=structure.direction, bgcolor=chip.wafer.bg(), layer = layerA))
+    
+    structure.translatePos((finger_length+stub_end, (finger_number+0.5)*(finger_sep+finger_width)), angle=0)
+    FC_CPW_taper(chip, structure, length=50, w0=total_width, s0=37.5, w1=cpw_w, s1=cpw_s,  Qlayer = Qlayer)
+
+def FC_bumpbond_connect(chip, structure, bumpno, opentaper = 50, cpw_w = 10, cpw_s= 6, Qlayer = True):
+    if Qlayer:
+        layerA = '5_M1'
+        layerB = '105_IM1'
+    else:
+        layerA = '105_IM1'
+        layerB = '5_M1'
+
+    FC_CPW_taper(chip, structure, length=opentaper, w0=cpw_w, s0=cpw_s, w1=50, s1=25, Qlayer=Qlayer)
+    chip.add(dxf.rectangle(structure.getPos((10, -15)), 35 * (bumpno-1) + 30, 30,
+                            rotation=structure.direction, bgcolor=chip.wafer.bg(), layer="40_UBM"))
+    chip.add(dxf.rectangle(structure.getPos((10, -15)), 35 * (bumpno -1) + 30, 30,
+                rotation=structure.direction, bgcolor=chip.wafer.bg(), layer="140_IUBM"))
+    for i in range(bumpno):
+        chip.add(dxf.circle(radius=7.5, center=structure.getPos((30/2 + 10 + i*35,0)), 
+                        bgcolor=chip.wafer.bg(), layer='145_IBUMP'))
+
+    structure_cut = structure.clone()
+    CPW_straight(chip, structure, length=10*2 + 35 * (bumpno-1) + 30, w=50, s=30, layer = layerA)
+    CPW_straight(chip, structure_cut, length=10*2 + 35 * (bumpno-1) + 30, w=50, s=30, layer = layerB)
+    
+    FC_CPW_taper(chip, structure, length=opentaper, w1=cpw_w, s1=cpw_s, w0=50, s0=25, Qlayer=not Qlayer)
+    return 50* 2 + 10*2 + 30*bumpno
+
+def FC_CPW_straight(chip, structure, length, w=None, s=None, bond_start = None, bond_pitch = 70, 
+                    bondwires = False, Qlayer = True, onlyairbridge=False, **kwargs):
+
+    if bond_start is None:
+        bond_start = (length % bond_pitch) / 2
+
+    if Qlayer:
+        layerA = '5_M1'
+        layerB = '105_IM1'
+    else:
+        layerA = '105_IM1'
+        layerB = '5_M1'
+    structure_cut = structure.clone()
+
+    CPW_straight(chip, structure, length = length, w = w, s= s, layer=layerA, 
+                    bond_start = bond_start, bondwires = bondwires, Qlayer = Qlayer, **kwargs)
+    stripw = w + 2*s + 2*5
+
+    if bondwires and not onlyairbridge:
+
+        bond_width = 7.5
+        Strip_straight(chip, structure_cut, length = bond_start - bond_width / 2, w = stripw, 
+                          layer=layerB)
+        num_bonds = int((length-bond_start)/bond_pitch)
+        for i in range(num_bonds):
+            structure_cut.shiftPos(bond_width)
+            Strip_straight(chip, structure_cut, length = bond_pitch - bond_width, w = stripw, layer=layerB)
+        
+        structure_cut.shiftPos(bond_width)
+        remain_length = (length - bond_start) % bond_pitch - bond_width / 2
+        if remain_length > 0 :
+            Strip_straight(chip, structure_cut, length = remain_length,  
+                            w = stripw, layer=layerB)
+    else:
+        Strip_straight(chip, structure_cut, length = length, w = stripw, layer=layerB, bond_start = bond_start,
+                    **kwargs)
+    
+    return length
+
+def FC_CPW_bend(chip, structure, angle, CCW, radius, w, s, bondwires = False, Qlayer = True, 
+                onlyairbridge=False, ptDensity=64, **kwargs):
+    if Qlayer:
+        layerA = '5_M1'
+        layerB = '105_IM1'
+    else:
+        layerA = '105_IM1'
+        layerB = '5_M1'
+
+    structure_cut = structure.clone()
+
+    CPW_bend(chip, structure, radius = radius, angle = angle, CCW = CCW, w = w, 
+                ptDensity = ptDensity, bondwires = bondwires, Qlayer = Qlayer, layer=layerA, **kwargs)
+    stripw = w + 2*s + 2*5
+
+    if not bondwires or onlyairbridge:
+        Strip_bend(chip, structure_cut, radius = radius, angle = angle, CCW = CCW, w = stripw, 
+                  ptDensity = ptDensity, layer=layerB)
+    elif bondwires:
+        bond_pitch = kwargs.get('bond_pitch', None)
+        xvr_width = kwargs.get('bond_width', None)
+        angle_rad = math.radians(angle)
+        segments = int(angle_rad*radius/bond_pitch)
+        curve_start_angle = (angle_rad*radius % bond_pitch) / radius / 2 * 360 / (2* np.pi)
+        segment_angle = (bond_pitch - xvr_width) / radius * 360 / (2 * np.pi)
+
+        if segments > 0:
+            Strip_bend(chip, structure_cut, radius = radius, angle = curve_start_angle + 0.5*segment_angle, 
+                        CCW = CCW, w = stripw, ptDensity = ptDensity, layer=layerB)
+            xvr_angle = (xvr_width) / radius * 360 / (2 * np.pi)
+            if segments > 1:
+                for i in range(segments-1):
+                    Strip_bend(chip, structure_cut, radius = radius, angle = xvr_angle,
+                                CCW = CCW, w = stripw, ptDensity = ptDensity, layer='98_TEXT1')
+                    Strip_bend(chip, structure_cut, radius = radius, angle = segment_angle, 
+                            CCW = CCW, w = stripw, ptDensity = ptDensity, layer=layerB)
+            Strip_bend(chip, structure_cut, radius = radius, angle = xvr_angle,
+                            CCW = CCW, w = stripw, ptDensity = ptDensity, layer='98_TEXT1')
+            Strip_bend(chip, structure_cut, radius = radius, angle = curve_start_angle + 0.5*segment_angle, 
+                        CCW = CCW, w = stripw, ptDensity = ptDensity, layer=layerB)
+        else:
+            # sorry, no bonds for such arc length < 75
+            Strip_bend(chip, structure_cut, radius = radius, angle = angle, CCW = CCW, w = stripw, 
+                  ptDensity = ptDensity, layer=layerB)
+
+
+    return radius * np.pi / 2
+
+def FC_CPW_taper(chip, structure, length, w0, w1, bondwires = False, bond_start = None, 
+                 bond_pitch = 70, offset=[0,0], s=None, s0=None, s1=None, Qlayer = True, 
+                 onlyairbridge = False, **kwargs):
+    
+    if bond_start is None:
+        bond_start = (length % bond_pitch) / 2
+    if Qlayer:
+        layerA = '5_M1'
+        layerB = '105_IM1'
+    else:
+        layerA = '105_IM1'
+        layerB = '5_M1'
+
+    if s is not None and s0 is None and s1 is None:
+        s0 = s
+        s1 = s
+
+    structure_cut = structure.clone()
+
+    CPW_taper(chip, structure, length = length, w0 = w0, w1 = w1, s0 = s0, s1 = s1, offset = offset, 
+                 layer=layerA, bond_start = bond_start, bondwires = bondwires, Qlayer= Qlayer, **kwargs)
+    
+    stripw0 = w0 + 2*s0 + 2*5
+    stripw1 = w1 + 2*s1 + 2*5
+    w_diff = stripw1-stripw0
+
+    if bondwires and not onlyairbridge:
+
+        bond_width = kwargs.get('bond_width', None)
+        
+        Strip_taper(chip, structure_cut, length = bond_start - bond_width /2, w0 = stripw0, 
+                    w1 = stripw0 + w_diff * (bond_start - bond_width/ 2) / length,
+                        offset = [x * (bond_start - bond_width /2) / length for x in offset] , 
+                        layer=layerB)
+
+        num_bonds = int((length-bond_start)/bond_pitch)
+
+        for i in range(num_bonds):
+            structure_cut.translatePos((bond_width, offset[1]*(bond_width/length)))
+            segment_length = bond_pitch - bond_width
+            Strip_taper(chip, structure_cut, length = bond_pitch - bond_width, 
+                        w0 = stripw0 + w_diff * ((bond_start + bond_width / 2) + bond_pitch * i) / length, 
+                    w1 = stripw0 + w_diff * ((bond_start + bond_width / 2) + bond_pitch * i + segment_length) / length, 
+                    offset = [x * (bond_pitch - bond_width) / length for x in offset], 
+                    layer=layerB)
+        
+        structure_cut.translatePos((bond_width, offset[1]*(bond_width/length)))
+
+        remain_length = (length - bond_start) % bond_pitch - bond_width / 2
+        if remain_length > 0:
+            Strip_taper(chip, structure_cut, length = (length - bond_start) % bond_pitch - bond_width / 2, 
+                            w0 = stripw0 + w_diff * (bond_start  + bond_width / 2 + bond_pitch *num_bonds) / length, 
+                            w1 = stripw1,
+                            offset = [x * ((length - bond_start) % bond_pitch - bond_width / 2) / length for x in offset],
+                            layer=layerB)
+    else: 
+        Strip_taper(chip, structure_cut, length = length, w0 = stripw0, w1 = stripw1, offset = offset, 
+                layer=layerB, bond_start = bond_start, bondwires = bondwires, **kwargs)
+
+def FC_CPW_wiggles(chip, structure, length, nturns, CCW=True, start_bend = True, stop_bend = True,
+                  w=10, s= 6, radius = None, **kwargs):
+    def struct():
+        if isinstance(structure,m.Structure):
+            return structure
+        elif isinstance(structure,tuple):
+            return m.Structure(chip,structure)
+        else:
+            return chip.structure(structure)
+    if radius is None:
+        try:
+            radius = struct().defaults['radius']
+        except KeyError:
+            print('\x1b[33mradius not defined in ',chip.chipID,'!\x1b[0m')
+            return
+
+    h = (length - ((start_bend + stop_bend) * 1/2 + nturns * 2) * radius * np.pi) / (nturns * 4)
+
+    if h <= 0:
+        print(f'Error: length {h}um too short for given parameters')
+        return 
+    
+    if start_bend:
+        FC_CPW_bend(chip,structure,angle=90,CCW=CCW,w=w,s=s,radius=radius,**kwargs)
+
+    for n in range(nturns):
+        FC_CPW_straight(chip,structure,h,w=w,s=s,**kwargs)
+        FC_CPW_bend(chip,structure,angle=180,CCW=not CCW,w=w,s=s,radius=radius,**kwargs)
+        FC_CPW_straight(chip,structure,h*2,w=w,s=s,**kwargs)
+        FC_CPW_bend(chip,structure,angle=180,CCW=CCW,w=w,s=s,radius=radius,**kwargs)
+        FC_CPW_straight(chip,structure,h,w=w,s=s,**kwargs)
+
+    if stop_bend:
+        FC_CPW_bend(chip,structure,angle=90,CCW=not CCW,w=w,s=s,radius=radius,**kwargs)
 
