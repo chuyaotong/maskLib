@@ -124,3 +124,25 @@ def smallJ(chip, structure, start, j_length, Jlayer, Ulayer, gap=0.14, lead = 1,
         # base > j_length by 0.25 on each side
         mw.Strip_taper(chip, structure, length = .5, w0 = j_length + 0.5, w1 = lead, layer = Jlayer)
 
+def bumpbond_line(chip, structure, length, row=1):
+    s_bumpbond = structure.clone()
+    s_bumpbond_I=s_bumpbond.clone()
+    s_bond = s_bumpbond.cloneAlong((0,-(30 + (row-1)*35)/2+15))
+    mw.Strip_straight(chip, s_bumpbond, length = length, w = 30 + (row-1)*35, layer = '140_IUBM')
+    mw.Strip_straight(chip, s_bumpbond_I, length = length, w = 30 + (row-1)*35, layer = '40_UBM')
+    if length < 30:
+        n_bond = 0
+    elif length >=30:
+        n_bond = int((length-30) / 35) + 1
+    for j in range(row):
+        for i in range(n_bond):
+            chip.add(dxf.circle(radius=7.5, center=s_bond.getPos((15+(i)*35, (j)*35)), 
+                        bgcolor=chip.wafer.bg(), layer='145_IBUMP'))
+
+def zipline_straight(chip, structure, length, w, bond_row= [1,1], bond_delay = 10):
+    for i in range(2):
+        s_bumpbond = structure.cloneAlong((bond_delay,(-1)**(i+1)*((w+30+ (bond_row[i]-1)*35)/2+10)))
+        bumpbond_line(chip, s_bumpbond, length= length - bond_delay, row = bond_row[i])
+
+    mw.Strip_straight(chip, structure, length = length, w = w, layer = '105_IM1')
+
