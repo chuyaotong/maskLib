@@ -377,7 +377,8 @@ def Strip_pad(chip,structure,length,r_out=None,w=None,bgcolor=None,**kwargs):
         Strip_straight(chip,structure,length,w=w,bgcolor=bgcolor,**kwargs)
 
 ##TODO new function, need testing and neatening, add side tee features
-def Strip_tee(chip,structure,w=None,s=None,radius=None,r_ins=None,w1=None,w2=None, s1=None,bgcolor=None,hflip=False,branch_off=const.CENTER, polygon_overlap=False, **kwargs):
+def Strip_tee(chip,structure,w=None,s=None,radius=None,r_ins=None,w1=None,w2=None, s1=None,
+              offset= 0, bgcolor=None,hflip=False,branch_off=const.CENTER, polygon_overlap=False, **kwargs):
     
     '''
     w: incoming strip width
@@ -423,9 +424,9 @@ def Strip_tee(chip,structure,w=None,s=None,radius=None,r_ins=None,w1=None,w2=Non
     elif w2 < r_ins*2+w:
         w2= r_ins*2+w
 
-    chip.add(dxf.rectangle(struct().start,w1,w2,valign=const.MIDDLE,rotation=struct().direction,bgcolor=bgcolor,**kwargStrip(kwargs)),structure=structure)
-    s_l = struct().cloneAlong((w1/2,w2/2),newDirection=90, defaults=defaults1)
-    s_r = struct().cloneAlong((w1/2,-w2/2),newDirection=-90, defaults=defaults1)
+    chip.add(dxf.rectangle(struct().getPos((0,0-offset)),w1,w2,valign=const.MIDDLE,rotation=struct().direction,bgcolor=bgcolor,**kwargStrip(kwargs)),structure=structure)
+    s_l = struct().cloneAlong((w1/2,w2/2-offset),newDirection=90, defaults=defaults1)
+    s_r = struct().cloneAlong((w1/2,-w2/2-offset),newDirection=-90, defaults=defaults1)
 
     return s_l,s_r
 
@@ -2189,7 +2190,7 @@ def FC_CPW_bend(chip, structure, angle, CCW, radius, w, s, bondwires = False, Ql
 
     structure_cut = structure.clone()
 
-    CPW_bend(chip, structure, radius = radius, angle = angle, CCW = CCW, w = w, 
+    CPW_bend(chip, structure, radius = radius, angle = angle, CCW = CCW, w = w, s=s, 
                 ptDensity = ptDensity, bondwires = bondwires, Qlayer = Qlayer, layer=layerA, **kwargs)
     stripw = w + 2*s + 2*5
 
