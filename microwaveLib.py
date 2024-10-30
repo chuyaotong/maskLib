@@ -435,7 +435,7 @@ def Strip_rounded_pincer(chip, structure, pincer_padw,
                        pincer_l, pincer_r = None, 
                        w = None, r_end = None, pincer_w = None, r_tee = 1, 
                        left_half=False, right_half=False,
-                       pincer_flipped=False, 
+                       pincer_flipped=False, angle = 90, 
                        bgcolor=None, polygon_overlap=True, ptDensity = 64, **kwargs):
 
     def struct():
@@ -471,13 +471,13 @@ def Strip_rounded_pincer(chip, structure, pincer_padw,
         
     if not left_half and not right_half:
 
-        Strip_bend(chip, s_left, CCW=True, w=pincer_padw, radius = pincer_r, 
+        Strip_bend(chip, s_left, CCW=True, w=pincer_padw, radius = pincer_r, angle = angle, 
                       ptDensity = ptDensity, **kwargs)
         Strip_stub_open(chip, s_left, w = pincer_padw, r_out = r_end, length = pincer_l, 
                            curve_out = True, 
                            polygon_overlap=polygon_overlap, ptDensity = ptDensity, **kwargs)
 
-        Strip_bend(chip, s_right, CCW=False, w=pincer_padw, radius=pincer_r, **kwargs)
+        Strip_bend(chip, s_right, CCW=False, w=pincer_padw, radius=pincer_r, angle = angle, ptDensity= ptDensity, **kwargs)
         Strip_stub_open(chip, s_right, w = pincer_padw, r_out = r_end, length = pincer_l,
                            curve_out = True, polygon_overlap=polygon_overlap, **kwargs)
     
@@ -1450,6 +1450,89 @@ def TwoPinCPW_wiggles(chip,structure,w=None,s_ins=None,s_out=None,s=None,Width=N
     Inductor_wiggles(chip, s0, w=s_ins+2*w,Width=Width,maxWidth=maxWidth,**kwargs)
     Strip_wiggles(chip, struct(), w=s_ins,maxWidth=maxWidth-w,**kwargs)
 
+def CPW_rounded_pincer(chip, structure, w=10, s = 10,  pincer_pad_w = 10, 
+                       pincer_l=4, pincer_r = 30, pincer_angle = 15, r_tee = 5, pincer_w_add = 0, 
+                       left_half=False, right_half=False,
+                       pincer_flipped=False, ptDensity = 64,
+                       bgcolor=None, polygon_overlap=True, **kwargs):
+
+    def struct():
+        if isinstance(structure,m.Structure):
+            return structure
+        elif isinstance(structure,tuple):
+            return m.Structure(chip,structure)
+        else:
+            return chip.structure(structure)
+    if w is None:
+        try:
+            w = struct().defaults['w']
+        except KeyError:
+            w=0
+            print('\x1b[33mw not defined in ',chip.chipID)
+    
+    # if r_end is None:
+    #     r_end = w / 2
+    
+    # if pincer_w is None:
+    #     pincer_w = w
+
+    if pincer_r <= w/2 or pincer_r is None:
+        pincer_r = w/2
+         
+    if not pincer_flipped: s_start = struct().clone()
+    # else:
+    #     struct().shiftPos(pincer_padw + pincer_ter + 2 * s,angle=180)
+    #     s_start = struct().clone()
+    #mw.CPW_taper(chip, struct(), w = w, s0=6,s1=15, length = 2,  **kwargs)
+    s_left, s_right = CPW_tee(chip, struct(), w = w, w1=pincer_pad_w, s=s, radius = r_tee, r_ins=0, 
+                            ptDensity=ptDensity, polygon_overlap=polygon_overlap,  **kwargs)
+    # s_left, s_right = Strip_tee(chip, struct(), w = w, w1 = pincer_padw, w2 = pincer_w, r_ins=0, 
+    #                         ptDensity=ptDensity, polygon_overlap=polygon_overlap, offset = 0, **kwargs)
+        
+    if not left_half and not right_half:
+        CPW_straight(chip, s_left, s=s, w = pincer_pad_w, length = pincer_w_add, **kwargs)
+        CPW_bend(chip, s_left, s=s, angle = pincer_angle, CCW=True, w=pincer_pad_w, radius = pincer_r, 
+                      ptDensity = ptDensity, **kwargs)
+        CPW_straight(chip, s_left, s=s, w = pincer_pad_w, length = pincer_l, **kwargs)
+        CPW_stub_open(chip, s_left, s=s, w = pincer_pad_w, r_out = (s+pincer_pad_w)/2, r_ins = pincer_pad_w/2, length = s, 
+                           curve_out = True, 
+                           polygon_overlap=polygon_overlap, ptDensity = ptDensity, **kwargs)
+        CPW_straight(chip, s_right, s=s, w = pincer_pad_w, length = pincer_w_add, **kwargs)
+        CPW_bend(chip, s_right, CCW=False,s=s, w=pincer_pad_w, radius=pincer_r, angle=pincer_angle,**kwargs)
+        CPW_straight(chip, s_right, s=s, w = pincer_pad_w, length = pincer_l, **kwargs)
+        CPW_stub_open(chip, s_right, s=s, w = pincer_pad_w, r_out = (s+pincer_pad_w)/2, r_ins = pincer_pad_w/2, length = s,
+                           curve_out = True, polygon_overlap=polygon_overlap, **kwargs)
+    
+    elif left_half:
+        CPW_straight(chip, s_left, s=s, w = pincer_pad_w, length = pincer_w_add, **kwargs)
+        CPW_bend(chip, s_left, s=s, angle = pincer_angle, CCW=True, w=pincer_pad_w, radius = pincer_r, 
+                      ptDensity = ptDensity, **kwargs)
+        CPW_straight(chip, s_left, s=s, w = pincer_pad_w, length = pincer_l, **kwargs)
+        CPW_stub_open(chip, s_left, s=s, w = pincer_pad_w, r_out = (s+pincer_pad_w)/2, r_ins = pincer_pad_w/2, length = s, 
+                           curve_out = True, 
+                           polygon_overlap=polygon_overlap, ptDensity = ptDensity, **kwargs)
+        
+        CPW_straight(chip, s_right, s=s, w = pincer_pad_w, length = pincer_w_add, **kwargs)
+        CPW_stub_open(chip, s_right, s=s, w = pincer_pad_w, r_out = (s+pincer_pad_w)/2, r_ins = pincer_pad_w/2, length = s,
+                           curve_out = True, polygon_overlap=polygon_overlap, **kwargs) 
+        
+    elif right_half:
+        CPW_stub_open(chip, s_left, s=s, w = pincer_pad_w, r_out = (s+pincer_pad_w)/2, r_ins = pincer_pad_w/2, length = s, 
+                           curve_out = True, 
+                           polygon_overlap=polygon_overlap, ptDensity = ptDensity, **kwargs)
+        
+        CPW_straight(chip, s_right, s=s, w = pincer_pad_w, length = pincer_w_add, **kwargs)
+        CPW_bend(chip, s_right, CCW=False,s=s, w=pincer_pad_w, radius=pincer_r, angle=pincer_angle,**kwargs)
+        CPW_straight(chip, s_right, s=s, w = pincer_pad_w, length = pincer_l, **kwargs)
+        CPW_stub_open(chip, s_right, s=s, w = pincer_pad_w, r_out = (s+pincer_pad_w)/2, r_ins = pincer_pad_w/2, length = s,
+                           curve_out = True, polygon_overlap=polygon_overlap, **kwargs)
+
+
+    if not pincer_flipped:
+        struct().updatePos(s_start.getPos(), angle = 180)
+    else: 
+        struct().updatePos(s_start.getPos(),angle=180)
+
 def CPW_pincer(chip,structure,pincer_w,pincer_l,pincer_padw,pincer_tee_r=0,pad_r=None,w=None,s=None,pincer_flipped=False,bgcolor=None, polygon_overlap=True, **kwargs):
     '''
     pincer_w :      
@@ -1524,7 +1607,8 @@ def CPW_pincer(chip,structure,pincer_w,pincer_l,pincer_padw,pincer_tee_r=0,pad_r
     else: 
         struct().updatePos(s_start.getPos(),angle=180)
         #struct.direction = s_start.direction + 180
-        
+
+def CPW_rounded_pincer
 def CPW_tee_stub(chip,structure,stub_length,stub_w,tee_r=0,outer_width=None,w=None,s=None,pincer_flipped=False,bgcolor=None,**kwargs):
     '''
     stub_length :    end-to-end length of stub pin (not counting gap) 
