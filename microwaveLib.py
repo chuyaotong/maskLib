@@ -1608,7 +1608,6 @@ def CPW_pincer(chip,structure,pincer_w,pincer_l,pincer_padw,pincer_tee_r=0,pad_r
         struct().updatePos(s_start.getPos(),angle=180)
         #struct.direction = s_start.direction + 180
 
-def CPW_rounded_pincer
 def CPW_tee_stub(chip,structure,stub_length,stub_w,tee_r=0,outer_width=None,w=None,s=None,pincer_flipped=False,bgcolor=None,**kwargs):
     '''
     stub_length :    end-to-end length of stub pin (not counting gap) 
