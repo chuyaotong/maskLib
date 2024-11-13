@@ -597,11 +597,11 @@ def CPW_taper(chip,structure,length=None,w0=None,s0=None,w1=None,s1=None,bgcolor
     if bondwires: # bond parameters patched through kwargs
         num_bonds = int((length-bond_start)/bond_pitch)
         this_struct = struct().clone()
-        this_struct.translatePos((bond_start, bond_start/length * (w1/2-w0/2)),angle=0)
+        this_struct.translatePos((bond_start, 0),angle=0) #bond_start/length * (w1/2-w0/2)
         if not incl_end_bond: num_bonds -= 1
         for i in range(num_bonds + 1):
             Airbridge(chip, this_struct, **kwargs)
-            this_struct.translatePos((bond_pitch, bond_pitch/length * (w1/2-w0/2)))
+            this_struct.translatePos((bond_pitch, 0)) ##bond_pitch/length * (w1/2-w0/2)
 
     chip.add(SkewRect(struct().getPos((0,-w0/2)),length,s0,(offset[0],w0/2-w1/2+offset[1]),s1,rotation=struct().direction,valign=const.TOP,edgeAlign=const.TOP,bgcolor=bgcolor,**kwargs))
     chip.add(SkewRect(struct().getPos((0,w0/2)),length,s0,(offset[0],w1/2-w0/2+offset[1]),s1,rotation=struct().direction,valign=const.BOTTOM,edgeAlign=const.BOTTOM,bgcolor=bgcolor,**kwargs),structure=structure,offsetVector=(length+offset[0],offset[1]))
@@ -1511,12 +1511,14 @@ def CPW_rounded_pincer(chip, structure, w=10, s = 10,  pincer_pad_w = 10,
         CPW_stub_open(chip, s_left, s=s, w = pincer_pad_w, r_out = (s+pincer_pad_w)/2, r_ins = pincer_pad_w/2, length = s, 
                            curve_out = True, 
                            polygon_overlap=polygon_overlap, ptDensity = ptDensity, **kwargs)
-        
         CPW_straight(chip, s_right, s=s, w = pincer_pad_w, length = pincer_w_add, **kwargs)
+    
         CPW_stub_open(chip, s_right, s=s, w = pincer_pad_w, r_out = (s+pincer_pad_w)/2, r_ins = pincer_pad_w/2, length = s,
                            curve_out = True, polygon_overlap=polygon_overlap, **kwargs) 
         
     elif right_half:
+        CPW_straight(chip, s_left, s=s, w = pincer_pad_w, length = pincer_w_add, **kwargs)
+
         CPW_stub_open(chip, s_left, s=s, w = pincer_pad_w, r_out = (s+pincer_pad_w)/2, r_ins = pincer_pad_w/2, length = s, 
                            curve_out = True, 
                            polygon_overlap=polygon_overlap, ptDensity = ptDensity, **kwargs)
@@ -1736,7 +1738,7 @@ def Airbridge(
         delta = 0
         
         if br_radius > 0:
-            xvr_length += 4
+            xvr_length += 0
 
         if 5 <= xvr_length <= 16: # BR.W.1, RR.L.1
             xvr_width = 5
@@ -1794,7 +1796,7 @@ def Airbridge(
     return s_l, s_r
 
 
-def CPW_bridge(chip, structure, xvr_length=None, w=None, s=None, lincolnLabs=False, BRLAYER=None, RRLAYER=None, **kwargs):
+def CPW_bridge(chip, structure, xvr_length=None, w=None, s=None, s0= None,lincolnLabs=False, BRLAYER=None, RRLAYER=None, **kwargs):
     """
     Draws an airbridge to bridge two sections of CPW, as well as the necessary connections.
     w, s are for the CPW we want to connect.
@@ -1840,7 +1842,8 @@ def CPW_bridge(chip, structure, xvr_length=None, w=None, s=None, lincolnLabs=Fal
     s_left, s_right = Airbridge(chip, struct(), xvr_length=xvr_length, lincolnLabs=lincolnLabs, **kwargs)
 
     w0 = rr_width+2*rr_br_gap
-    s0 = s/w * w0
+    if s0 is None:
+        s0 = s/w * w0
 
     s_left.shiftPos(-rr_length - 2*rr_br_gap - rr_cpw_gap)
     CPW_straight(chip, s_left, length=rr_length + 2*rr_br_gap + rr_cpw_gap, w=rr_width + 2*rr_br_gap, s=s0, **kwargs)
@@ -2223,11 +2226,17 @@ def FC_bumpbond_connect(chip, structure, bumpno, opentaper = 50, cpw_w = 10, cpw
     FC_CPW_taper(chip, structure, length=opentaper, w1=cpw_w, s1=cpw_s, w0=50, s0=25, Qlayer=not Qlayer)
     return 50* 2 + 10*2 + 30*bumpno
 
-def FC_CPW_straight(chip, structure, length, w=None, s=None, bond_start = None, bond_pitch = 70, 
-                    bondwires = False, Qlayer = True, onlyairbridge=False, **kwargs):
-
+def FC_CPW_straight(chip, structure, length, w=None, s=None, bond_start = None, bond_pitch = 70, bond_cut_width = 5,
+                    bondwires = False, cut_offset = 0, shift_offset= 0, Qlayer = True, onlyairbridge=False, 
+                    onlycutbridge = False,
+                      **kwargs):
+    if length < 15:
+        onlycutbridge = True
     if bond_start is None:
-        bond_start = (length % bond_pitch) / 2
+        if length > 60:
+            bond_start = 50
+        else:
+            bond_start = (length % bond_pitch) / 2
 
     if Qlayer:
         layerA = '5_M1'
@@ -2236,14 +2245,19 @@ def FC_CPW_straight(chip, structure, length, w=None, s=None, bond_start = None, 
         layerA = '105_IM1'
         layerB = '5_M1'
     structure_cut = structure.clone()
-
+    
+    if onlycutbridge:
+        cpw_bondwires = False
+    else:
+        cpw_bondwires = bondwires
     CPW_straight(chip, structure, length = length, w = w, s= s, layer=layerA, 
-                    bond_start = bond_start, bondwires = bondwires, Qlayer = Qlayer, **kwargs)
-    stripw = w + 2*s + 2*5
-
+                    bond_start = bond_start, bondwires = cpw_bondwires, Qlayer = Qlayer, **kwargs)
+    stripw = w + 2*s + 2*5 - cut_offset
+    structure_cut.translatePos((0,shift_offset/2))
+    
     if bondwires and not onlyairbridge:
 
-        bond_width = 7.5
+        bond_width = bond_cut_width
         Strip_straight(chip, structure_cut, length = bond_start - bond_width / 2, w = stripw, 
                           layer=layerB)
         num_bonds = int((length-bond_start)/bond_pitch)
@@ -2263,13 +2277,15 @@ def FC_CPW_straight(chip, structure, length, w=None, s=None, bond_start = None, 
     return length
 
 def FC_CPW_bend(chip, structure, angle, CCW, radius, w, s, bondwires = False, Qlayer = True, 
-                onlyairbridge=False, ptDensity=64, **kwargs):
+                onlyairbridge=True, ptDensity=64, **kwargs):
     if Qlayer:
         layerA = '5_M1'
         layerB = '105_IM1'
+        layerC = '109_IXOR'
     else:
         layerA = '105_IM1'
         layerB = '5_M1'
+        layerC = '9_XOR'
 
     structure_cut = structure.clone()
 
@@ -2294,6 +2310,9 @@ def FC_CPW_bend(chip, structure, angle, CCW, radius, w, s, bondwires = False, Ql
             xvr_angle = (xvr_width) / radius * 360 / (2 * np.pi)
             if segments > 1:
                 for i in range(segments-1):
+                    # Strip_straight(chip, structure_cut, length = xvr_width, w = stripw,
+                    #                 layer=layerC)
+                    # structure_cut.translatePos((-xvr_width, 0))
                     Strip_bend(chip, structure_cut, radius = radius, angle = xvr_angle,
                                 CCW = CCW, w = stripw, ptDensity = ptDensity, layer='98_TEXT1')
                     Strip_bend(chip, structure_cut, radius = radius, angle = segment_angle, 
@@ -2312,7 +2331,7 @@ def FC_CPW_bend(chip, structure, angle, CCW, radius, w, s, bondwires = False, Ql
 
 def FC_CPW_taper(chip, structure, length, w0, w1, bondwires = False, bond_start = None, 
                  bond_pitch = 70, offset=[0,0], s=None, s0=None, s1=None, Qlayer = True, 
-                 onlyairbridge = False, **kwargs):
+                 onlyairbridge = True, **kwargs):
     
     if bond_start is None:
         bond_start = (length % bond_pitch) / 2
@@ -2404,3 +2423,39 @@ def FC_CPW_wiggles(chip, structure, length, nturns, CCW=True, start_bend = True,
     if stop_bend:
         FC_CPW_bend(chip,structure,angle=90,CCW=not CCW,w=w,s=s,radius=radius,**kwargs)
 
+def xvr_airbridges(chip, structure, Qlayer, cut= True, w=10, s=6, crosstot=22):
+
+    linexvr_params_I = dict(
+        xvr_length = 32,
+        lincolnLabs=True,
+        Qlayer = False #CHECK
+    )
+
+    linexvr_params_Q = dict(
+        xvr_length = 32,
+        lincolnLabs=True,
+        Qlayer = True #CHECK
+    )
+
+    if Qlayer:
+        xvr_params_shield = linexvr_params_Q
+        if cut:
+            cutlayer='9_XOR'
+    elif not Qlayer:
+        xvr_params_shield = linexvr_params_I
+        if cut:
+            cutlayer='109_IXOR'
+    
+    s_bridge = structure.cloneAlong((crosstot/2,0))
+    Airbridge(chip, s_bridge, **xvr_params_shield)
+    # s_bridge.translatePos((15.5 +3,0))
+    # mw.Airbridge(chip, s_bridge, **xvr_params_shield)
+
+    if cut:
+        for i in range (2):
+            s_cut = structure.cloneAlong((crosstot/2-16/2,0))
+            s_cut.translatePos((0,-24.5+i*49))
+            Strip_straight(chip, s_cut, w= 17, length = 16, layer = cutlayer)
+
+
+    CPW_straight(chip, structure, length=crosstot, w=w, s=s, layer = '5_M1')

@@ -75,8 +75,12 @@ def junction_chain(chip, structure, n_junc_array=None, window=0.57, ja_length=No
                                 structure=structure, length= window )
     struct().translatePos((0, +ja_length/2))
 
-def smallJ(chip, structure, start, j_length, Jlayer, Ulayer, gap=0.14, lead = 1, 
+def smallJ(chip, structure, start, j_length, Jlayer, Ulayer, gap=0.14, lead = 2, 
            vertical = False, forward = 1, **kwargs):
+    if vertical:
+        structure_junc = structure.clone()
+    elif not vertical:
+        structure_junc = m.Structure(chip, start=structure.getPos(), )
 
     x, y = start
 
@@ -86,6 +90,10 @@ def smallJ(chip, structure, start, j_length, Jlayer, Ulayer, gap=0.14, lead = 1,
     # taper (0.5) + finger (1.36) + gap (0.14) = lead (2) speficiied by LL
     # taper extend over finger <2 on ech side
     if not vertical:
+        if not forward:
+            structure_junc.translatePos((-3, 0), angle=0)
+            x -= 3
+            y += lead/2
         #TODO FIX
         j_quad = dxf.polyline(points=[[x, y], [x+0.5, y-tmp], [x+0.5, y-tmp-j_length], [x, y-lead], [x, y]], bgcolor=chip.wafer.bg(), layer=Jlayer)
         j_quad.close()
@@ -95,13 +103,36 @@ def smallJ(chip, structure, start, j_length, Jlayer, Ulayer, gap=0.14, lead = 1,
         u_quad.close()
         chip.add(u_quad)
 
-        structure.translatePos((0.5, -tmp-j_length), angle=0)
+        structure_junc.translatePos((0.5, -tmp-j_length), angle=0)
         
-        chip.add(dxf.rectangle(structure.getPos((0, 0)), 1.36, j_length,
-                            rotation=structure.direction, bgcolor=chip.wafer.bg(), layer=Jlayer))
-        chip.add(dxf.rectangle(structure.getPos((0, 0)), 1.36 + gap, j_length,
-                            rotation=structure.direction, bgcolor=chip.wafer.bg(), layer=Ulayer))
-        structure.translatePos((1.36 + gap, j_length/2), angle=0)
+        if forward:
+            forward_shift = 0
+        elif not forward:
+            forward_shift = lead/2
+        chip.add(dxf.rectangle(structure_junc.getPos((0, forward_shift)), 1.36, j_length,
+                            rotation=structure_junc.direction, bgcolor=chip.wafer.bg(), layer=Jlayer))
+        chip.add(dxf.rectangle(structure_junc.getPos((0, forward_shift)), 1.36 + gap, j_length,
+                            rotation=structure_junc.direction, bgcolor=chip.wafer.bg(), layer=Ulayer))
+        #structure_junc.translatePos((1.36 + gap, j_length/2), angle=0)
+        if forward:
+            structure.translatePos((2,-1), angle=0)
+            if (j_length + 0.5 )< lead:
+                #mw.Strip_straight(chip, structure, length = 1, w = j_length + 0.5, layer = Jlayer)
+                mw.Strip_taper(chip, structure, length = 1, w0 = j_length + 0.55, w1 = lead, layer = Jlayer)
+            elif (j_length +0.5 )> lead:
+                mw.Strip_straight(chip, structure, length = .5, w = j_length + 0.55, layer = Jlayer)
+                mw.Strip_taper(chip, structure, length = .5, w0 = j_length + 0.55, w1 = lead, layer = Jlayer)
+        elif not forward:
+            structure.translatePos((0,0), angle=0)
+            if (j_length + 0.5 )< lead:
+                #mw.Strip_straight(chip, structure, length = 1, w = j_length + 0.5, layer = Jlayer)
+                mw.Strip_taper(chip, structure, length = 1, w1 = j_length + 0.55, w0 = lead, layer = Jlayer)
+            elif (j_length +0.5 )> lead:
+                mw.Strip_straight(chip, structure, length = .5, w = j_length + 0.55, layer = Jlayer)
+                mw.Strip_taper(chip, structure, length = .5, w1 = j_length + 0.55, w0 = lead, layer = Jlayer)
+            structure.translatePos((2,0), angle=0)
+            
+        
 
     elif vertical:
 
@@ -119,16 +150,24 @@ def smallJ(chip, structure, start, j_length, Jlayer, Ulayer, gap=0.14, lead = 1,
         u_quad.close()
         chip.add(u_quad)
 
-        structure.translatePos((0.5, lead/2-tmp-j_length), angle=0)
+        structure_junc.translatePos((0.5, lead/2-tmp-j_length), angle=0)
         
-        chip.add(dxf.rectangle(structure.getPos((0, 0)), 1.36, j_length,
-                            rotation=structure.direction, bgcolor=chip.wafer.bg(), layer=Jlayer))
-        chip.add(dxf.rectangle(structure.getPos((0, 0)), 1.36 + gap, j_length,
-                            rotation=structure.direction, bgcolor=chip.wafer.bg(), layer=Ulayer))
+        chip.add(dxf.rectangle(structure_junc.getPos((0, 0)), 1.36, j_length,
+                            rotation=structure_junc.direction, bgcolor=chip.wafer.bg(), layer=Jlayer))
+        chip.add(dxf.rectangle(structure_junc.getPos((0, 0)), 1.36 + gap, j_length,
+                            rotation=structure_junc.direction, bgcolor=chip.wafer.bg(), layer=Ulayer))
         
-        structure.translatePos((1.36 + gap, +j_length/2), angle=0)
+        structure_junc.translatePos((1.36 + gap, +j_length/2), angle=0)
         # base > j_length by 0.25 on each side
-        mw.Strip_taper(chip, structure, length = .5, w0 = j_length + 0.5, w1 = lead, layer = Jlayer)
+        structure.translatePos((2,0), angle=0)
+        if (j_length + 0.5 )< lead:
+            #mw.Strip_straight(chip, structure, length = 1, w = j_length + 0.5, layer = Jlayer)
+            mw.Strip_taper(chip, structure, length = 1, w0 = j_length + 0.55, w1 = lead, layer = Jlayer)
+        elif (j_length +0.5 )> lead:
+            mw.Strip_straight(chip, structure, length = .5, w = j_length + 0.55, layer = Jlayer)
+            mw.Strip_taper(chip, structure, length = .5, w0 = j_length + 0.55, w1 = lead, layer = Jlayer)
+        
+
 
 def bumpbond_line(chip, structure, length, row=1):
     s_bumpbond = structure.clone()
@@ -152,28 +191,41 @@ def zipline_straight(chip, structure, length, w, bond_row= [1,1], bond_delay = 1
 
     mw.Strip_straight(chip, structure, length = length, w = w, layer = '105_IM1')
 
-def nm_zipline_straight(chip, structure, length, w, nm_delay=0):
-    layerUBM = ['40_UBM', '140_IUBM']
+def nm_zipline_straight(chip, structure, length, w, both_layer=False, nm_delay=0, nm_cover= 20):
+    layerUBM = ['140_IUBM', '40_UBM']
     s_M = structure.clone()
     mw.Strip_straight(chip, structure, length = length, w = w, layer = '105_IM1')
-    for i in range (2):
+    if both_layer:
+        loop=2
+    else:
+        loop=1
+    for i in range (loop):
         s_UBM = s_M.cloneAlong((nm_delay,0))
-        mw.Strip_straight(chip, s_UBM, length = length - nm_delay, w = w + 20, layer = layerUBM[i])
-    mw.Strip_straight(chip, s_M, length = length, w = w, layer = '5_M1')
+        mw.Strip_straight(chip, s_UBM, length = length - nm_delay, w = w + nm_cover, layer = layerUBM[i])
+    
+    if both_layer:
+        mw.Strip_straight(chip, s_M, length = length, w = w, layer = '5_M1')
     return 
 
-def nm_zipline_bend(chip, structure, radius, angle, w, CCW = True, nm_delay=10):
-    layerUBM = ['40_UBM', '140_IUBM']
+def nm_zipline_bend(chip, structure, radius, angle, w, CCW = True, both_layer= False, nm_delay=10):
+    layerUBM = ['140_IUBM', '40_UBM']
     s_M = structure.clone()
     mw.Strip_bend(chip, structure, radius = radius,  angle = angle, w = w, CCW = CCW, layer = '105_IM1')
-    for i in range (2):
+    if both_layer:
+        loop=2
+    else:
+        loop=1
+    for i in range (loop):
         s_UBM = s_M.cloneAlong((0,0))
         mw.Strip_bend(chip, s_UBM, radius = radius,  angle = angle, w = w + 20, CCW = CCW, layer = layerUBM[i])
-    mw.Strip_bend(chip, s_M, radius = radius,  angle = angle, CCW = CCW, w = w, layer = '5_M1')
+    
+    if both_layer:
+        mw.Strip_bend(chip, s_M, radius = radius,  angle = angle, CCW = CCW, w = w, layer = '5_M1')
     return 
 
 def C_shaped_cutout(chip,structure,layer):
     C_structure = structure.clone()
-    mw.Strip_straight(chip, C_structure, length=2, w = 2, layer = layer)
-    mw.Strip_straight(chip, C_structure, length=2, w = 6, layer = layer)
+    mw.Strip_straight(chip, C_structure, length=2, w = 2+0.45*2, layer = layer)
+    C_structure.translatePos((-0.45, 0))
+    mw.Strip_straight(chip, C_structure, length=2+0.45*2, w = 6+0.45*2, layer = layer)
     
